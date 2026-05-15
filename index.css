@@ -1,0 +1,983 @@
+import React, { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "motion/react";
+import { 
+  PiggyBank, 
+  LogIn, 
+  LogOut, 
+  Wallet, 
+  TrendingUp, 
+  TrendingDown, 
+  Save, 
+  History,
+  Info,
+  ChevronRight,
+  User,
+  Pencil,
+  Trash2,
+  X,
+  Calendar as CalendarIcon
+} from "lucide-react";
+import confetti from "canvas-confetti";
+
+// --- Components ---
+
+import { 
+  BarChart, 
+  Bar, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  Legend, 
+  ResponsiveContainer,
+  Cell,
+  PieChart,
+  Pie,
+  LineChart,
+  Line,
+  AreaChart,
+  Area
+} from "recharts";
+
+const ParticleBackground = () => {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    let particles: { x: number; y: number; size: number; speedX: number; speedY: number; opacity: number }[] = [];
+    const particleCount = 60;
+
+    const resize = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+    };
+
+    const createParticles = () => {
+      particles = [];
+      for (let i = 0; i < particleCount; i++) {
+        particles.push({
+          x: Math.random() * canvas.width,
+          y: Math.random() * canvas.height,
+          size: Math.random() * 2 + 1,
+          speedX: Math.random() * 1 - 0.5,
+          speedY: Math.random() * 1 - 0.5,
+          opacity: Math.random() * 0.5 + 0.2
+        });
+      }
+    };
+
+    const animate = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      particles.forEach((p) => {
+        p.x += p.speedX;
+        p.y += p.speedY;
+
+        if (p.x < 0) p.x = canvas.width;
+        if (p.x > canvas.width) p.x = 0;
+        if (p.y < 0) p.y = canvas.height;
+        if (p.y > canvas.height) p.y = 0;
+
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255, 255, 255, ${p.opacity})`;
+        ctx.fill();
+      });
+      requestAnimationFrame(animate);
+    };
+
+    window.addEventListener("resize", resize);
+    resize();
+    createParticles();
+    animate();
+
+    return () => window.removeEventListener("resize", resize);
+  }, []);
+
+  return <canvas ref={canvasRef} className="fixed inset-0 pointer-events-none z-0" />;
+};
+
+const GlassCard = ({ children, className = "" }: { children: React.ReactNode; className?: string }) => (
+  <motion.div
+    initial={{ opacity: 0, y: 20 }}
+    animate={{ opacity: 1, y: 0 }}
+    className={`backdrop-blur-xl bg-white/10 border border-white/20 rounded-3xl shadow-2xl overflow-hidden ${className}`}
+  >
+    {children}
+  </motion.div>
+);
+
+// --- Main App ---
+
+export default function App() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [user, setUser] = useState<{ id: string; name: string } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  
+  // Login State
+  const [username, setUsername] = useState("");
+  const [password, setPassword] = useState("");
+
+  // Form State
+  const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+  const [item, setItem] = useState("");
+  const [income, setIncome] = useState("");
+  const [savings, setSavings] = useState("");
+  const [expense, setExpense] = useState("");
+  const [categoryGroup, setCategoryGroup] = useState("ปัจจัย 4");
+  const [subType, setSubType] = useState("อาหาร");
+  const [note, setNote] = useState("");
+  const [transactions, setTransactions] = useState<any[]>([]);
+  const [view, setView] = useState<"entry" | "dashboard">("entry");
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
+  const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
+  const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
+  const [entryTab, setEntryTab] = useState<"general" | "saving">("general");
+
+  const fetchTransactions = async () => {
+    if (!user?.id) return;
+    try {
+      const res = await fetch(`/api/transactions?studentId=${user.id}`);
+      const data = await res.json();
+      if (data.success) {
+        setTransactions(data.transactions);
+      }
+    } catch (err) {
+      console.error("Failed to fetch transactions");
+    }
+  };
+
+  useEffect(() => {
+    if (isLoggedIn) {
+      fetchTransactions();
+    }
+  }, [isLoggedIn]);
+
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    
+    try {
+      const res = await fetch("/api/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password })
+      });
+      const data = await res.json();
+      
+      if (data.success) {
+        setUser(data.student);
+        setIsLoggedIn(true);
+        confetti({
+          particleCount: 100,
+          spread: 70,
+          origin: { y: 0.6 },
+          colors: ['#3b82f6', '#1d4ed8', '#ffffff']
+        });
+
+        // Request Notification Permission
+        if ("Notification" in window) {
+          Notification.requestPermission();
+        }
+      } else {
+        setError(data.message);
+      }
+    } catch (err) {
+      setError("เกิดข้อผิดพลาดในการเชื่อมต่อเซิร์ฟเวอร์");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!item) return alert("กรุณาระบุรายการ");
+    
+    const body = {
+      studentId: user?.id,
+      date: new Date(date).toLocaleDateString('th-TH'),
+      item,
+      income: entryTab === "general" ? (income || "0") : "0",
+      savings: entryTab === "saving" ? (savings || "0") : (editingTransactionId ? (savings || "0") : "0"),
+      expense: entryTab === "general" ? (expense || "0") : "0",
+      type: entryTab === "saving" ? "การออมเงิน" : `${categoryGroup}: ${subType}`,
+      note
+    };
+
+    setLoading(true);
+    try {
+      const url = editingTransactionId ? `/api/transactions/${editingTransactionId}` : "/api/save";
+      const method = editingTransactionId ? "PUT" : "POST";
+
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      });
+      
+      const data = await res.json();
+      if (data.success) {
+        if (!editingTransactionId) {
+          confetti({
+            particleCount: 40,
+            spread: 50,
+            origin: { y: 0.8 },
+            colors: ['#3b82f6', '#ffffff']
+          });
+
+          // Trigger Push Notification
+          if ("Notification" in window && Notification.permission === "granted") {
+            new Notification("บันทึกสำเร็จ! ✅", {
+              body: `รายการ: ${item}\nคงเหลือสุทธิ: ${data.balance} บาท`,
+              icon: "https://cdn-icons-png.flaticon.com/512/2111/2111392.png"
+            });
+
+            // Low Balance Warning (Threshold: 50 Baht)
+            if (data.balance < 50) {
+              setTimeout(() => {
+                new Notification("⚠️ ยอดคงเหลือต่ำ!", {
+                  body: `ระวัง! เงินของคุณเหลือเพียง ${data.balance} บาท อย่าลืมวางแผนการใช้นะจ๊ะ`,
+                });
+              }, 1000);
+            }
+          }
+        }
+
+        alert(editingTransactionId ? "แก้ไขข้อมูลเรียบร้อย!" : `บันทึกข้อมูลเรียบร้อย! คงเหลือสุทธิ: ${data.balance} บาท\n"ออมก่อนรวยกว่านะจ๊ะ!"`);
+        fetchTransactions();
+        
+        // Reset form
+        setEditingTransactionId(null);
+        setItem("");
+        setIncome("");
+        setSavings("");
+        setExpense("");
+        setNote("");
+      }
+    } catch (err) {
+      alert("เกิดข้อผิดพลาดในการบันทึก");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEdit = (t: any) => {
+    setEditingTransactionId(t.id);
+    setItem(t.item);
+    setIncome(t.income);
+    setSavings(t.savings);
+    setExpense(t.expense);
+    setNote(t.note || "");
+    
+    // Parse date back (assuming format 'D/M/YYYY')
+    const [d, m, y] = t.date.split('/');
+    if (d && m && y) {
+      const formattedDate = `${Number(y) - 543}-${m.padStart(2, '0')}-${d.padStart(2, '0')}`;
+      setDate(formattedDate);
+    }
+
+    const [group, type] = t.type.split(': ');
+    setCategoryGroup(group || "ปัจจัย 4");
+    setSubType(type || "อาหาร");
+    
+    setView("entry");
+    setEntryTab(t.type === "การออมเงิน" ? "saving" : "general");
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("คุณต้องการลบรายการนี้ใช่หรือไม่?")) return;
+    
+    try {
+      const res = await fetch(`/api/transactions/${id}`, { method: "DELETE" });
+      const data = await res.json();
+      if (data.success) {
+        alert("ลบข้อมูลเรียบร้อย");
+        fetchTransactions();
+      }
+    } catch (err) {
+      alert("เกิดข้อผิดพลาดในการลบ");
+    }
+  };
+
+  const monthlyTransactions = transactions.filter(t => {
+    const d = new Date(t.timestamp);
+    return d.getMonth() === selectedMonth && d.getFullYear() === selectedYear;
+  });
+
+  const monthlyIncome = monthlyTransactions.reduce((sum, t) => sum + Number(t.income || 0), 0);
+  const monthlySavings = monthlyTransactions.reduce((sum, t) => sum + Number(t.savings || 0), 0);
+  const monthlyExpenses = monthlyTransactions.reduce((sum, t) => sum + Number(t.expense || 0), 0);
+  const monthlyNetBalance = monthlyIncome - monthlySavings - monthlyExpenses;
+
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-blue-100 overflow-x-hidden relative">
+      <ParticleBackground />
+      
+      {/* Decorative Gradients */}
+      <div className="fixed top-[-10%] left-[-10%] w-[50%] h-[50%] bg-blue-400/10 blur-[120px] rounded-full z-[-1]" />
+      <div className="fixed bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-indigo-600/10 blur-[120px] rounded-full z-[-1]" />
+
+      <main className="container mx-auto px-4 py-12 relative z-10 max-w-4xl min-h-screen flex flex-col justify-center">
+        
+        {/* Header */}
+        <motion.div 
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="text-center mb-12"
+        >
+          <div className="inline-flex items-center justify-center p-3 bg-white shadow-sm rounded-2xl border border-blue-100 mb-4">
+            <PiggyBank className="w-10 h-10 text-blue-600" />
+          </div>
+          <h1 className="text-4xl md:text-5xl font-extrabold tracking-tight text-blue-950 mb-2">
+            Bangkaew Digital Account
+          </h1>
+          <p className="text-blue-600/70 text-lg md:text-xl font-medium">
+            ก้าวสู่ความมั่งคั่งอย่างยั่งยืน ด้วยหลักเศรษฐกิจพอเพียง
+          </p>
+        </motion.div>
+
+        <AnimatePresence mode="wait">
+          {!isLoggedIn ? (
+            <motion.div
+              key="login"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="max-w-md mx-auto w-full"
+            >
+              <motion.div className="bg-white border border-blue-100 rounded-3xl shadow-xl shadow-blue-900/5 p-8 relative overflow-hidden">
+                <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-blue-400 via-blue-600 to-indigo-600" />
+                
+                <div className="flex items-center gap-3 mb-8">
+                  <div className="w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center border border-blue-100">
+                    <LogIn className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <h2 className="text-2xl font-bold text-blue-950">ยืนยันตัวตนนักเรียน</h2>
+                </div>
+
+                <form onSubmit={handleLogin} className="space-y-5">
+                  <div>
+                    <label htmlFor="studentId" className="block text-sm font-semibold text-blue-900/60 mb-2 uppercase tracking-wider">เลขประจำตัวนักเรียน</label>
+                    <input
+                      id="studentId"
+                      name="studentId"
+                      type="text"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      disabled={loading}
+                      autoFocus
+                      autoComplete="username"
+                      className="w-full bg-blue-50/50 border border-blue-100 rounded-xl px-4 py-3 outline-none focus:border-blue-400 focus:bg-white transition-all text-lg font-medium text-blue-950 placeholder:text-blue-200"
+                      placeholder="เช่น 12345"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="studentPassword" className="block text-sm font-semibold text-blue-900/60 mb-2 uppercase tracking-wider">รหัสผ่าน</label>
+                    <input
+                      id="studentPassword"
+                      name="studentPassword"
+                      type="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      disabled={loading}
+                      autoComplete="current-password"
+                      className="w-full bg-blue-50/50 border border-blue-100 rounded-xl px-4 py-3 outline-none focus:border-blue-400 focus:bg-white transition-all text-lg font-medium text-blue-950 placeholder:text-blue-200"
+                      placeholder="••••••••"
+                      required
+                    />
+                  </div>
+                  
+                  {error && (
+                    <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-red-600 text-sm bg-red-50 p-3 rounded-lg border border-red-100 font-medium">
+                      {error}
+                    </motion.p>
+                  )}
+
+                  <div className="bg-blue-50/50 p-3 rounded-xl border border-blue-100/50">
+                    <p className="text-[10px] text-blue-600 font-bold uppercase tracking-widest mb-1">ทดลองใช้งาน (Demo)</p>
+                    <p className="text-xs text-blue-900/60">ID: <span className="font-mono font-bold">12345</span> | Pass: <span className="font-mono font-bold">password123</span></p>
+                  </div>
+
+                  <button
+                    disabled={loading}
+                    className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg shadow-blue-200 transition-all flex items-center justify-center gap-2 group"
+                  >
+                    {loading ? "กำลังเข้าสู่ระบบ..." : "เข้าสู่ระบบ"}
+                    <ChevronRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                  </button>
+                </form>
+                
+                <div className="mt-8 pt-6 border-t border-blue-50 text-center">
+                  <p className="text-xs text-blue-900/30 font-bold uppercase tracking-widest">
+                    Bangkaew Prachasan School
+                  </p>
+                </div>
+              </motion.div>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="content"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="space-y-6"
+            >
+              <div className="flex flex-col md:flex-row gap-6">
+                
+                {/* User Info & Quick Stats */}
+                <div className="w-full md:w-1/3 flex flex-col gap-6">
+                  <motion.div className="bg-white border border-blue-100 rounded-3xl shadow-lg p-6 text-center">
+                    <div className="w-20 h-20 mx-auto rounded-full bg-blue-50 p-1 mb-4 flex items-center justify-center border border-blue-100">
+                      <User className="w-10 h-10 text-blue-600" />
+                    </div>
+                    <h3 className="text-xl font-bold text-blue-950">{user?.name}</h3>
+                    <p className="text-sm text-blue-600/60 font-medium">ID: {user?.id}</p>
+                    
+                    <button 
+                      onClick={() => setView(view === "entry" ? "dashboard" : "entry")}
+                      className={`mt-4 flex items-center justify-center w-full gap-2 transition-colors text-sm font-semibold py-3 rounded-xl border ${
+                        view === "dashboard" 
+                        ? "bg-blue-600 text-white border-blue-600 shadow-md" 
+                        : "text-blue-600 border-blue-100 hover:bg-blue-50"
+                      }`}
+                    >
+                      {view === "entry" ? <><History className="w-4 h-4" /> ดูประวัติและสรุปผล</> : <><Wallet className="w-4 h-4" /> กลับหน้าบันทึกข้อมูล</>}
+                    </button>
+
+                    <button 
+                      onClick={() => setIsLoggedIn(false)}
+                      className="mt-2 flex items-center justify-center w-full gap-2 text-red-500 hover:text-red-600 transition-colors text-sm font-semibold py-2 rounded-lg hover:bg-red-50"
+                    >
+                      <LogOut className="w-4 h-4" /> ออกจากระบบ
+                    </button>
+                  </motion.div>
+
+                  {view === "entry" && (
+                    <motion.div className="bg-blue-900 rounded-3xl shadow-lg p-6 text-white overflow-hidden relative group">
+                      <div className="absolute top-0 right-0 p-4 opacity-10 group-hover:scale-110 transition-transform">
+                        <PiggyBank className="w-20 h-20" />
+                      </div>
+                      <h4 className="flex items-center gap-2 text-blue-300 font-bold mb-4">
+                        <TrendingUp className="w-4 h-4" /> แรงบันดาลใจวันนี้
+                      </h4>
+                      <p className="italic font-medium text-blue-50/90 leading-relaxed text-lg">
+                        "การออมคือเมล็ดพันธุ์แห่งความมั่งคั่ง เริ่มปลูกตั้งแต่วันนี้ เพื่อร่มเงาในวันหน้า"
+                      </p>
+                    </motion.div>
+                  )}
+                </div>
+
+                {/* Main Content Area */}
+                <div className="w-full md:w-2/3">
+                  <AnimatePresence mode="wait">
+                    {view === "entry" ? (
+                      <motion.div 
+                        key="entry-form"
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -20 }}
+                        className="bg-white border border-blue-100 rounded-3xl shadow-xl p-8 h-full"
+                      >
+                        <div className="flex items-center gap-3 mb-8">
+                          <div className="p-2 bg-blue-50 rounded-lg">
+                            <Wallet className="w-6 h-6 text-blue-600" />
+                          </div>
+                          <div className="flex-1">
+                            <h2 className="text-2xl font-bold text-blue-950">{editingTransactionId ? "แก้ไขรายการ" : "บันทึกข้อมูล"}</h2>
+                            {!editingTransactionId && (
+                              <div className="flex gap-2 mt-4 bg-slate-100 p-1 rounded-xl w-fit">
+                                <button 
+                                  onClick={() => setEntryTab("general")}
+                                  className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${entryTab === "general" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+                                >
+                                  รายรับ-รายจ่าย
+                                </button>
+                                <button 
+                                  onClick={() => setEntryTab("saving")}
+                                  className={`px-4 py-1.5 rounded-lg text-sm font-bold transition-all ${entryTab === "saving" ? "bg-white text-blue-600 shadow-sm" : "text-slate-500 hover:text-slate-700"}`}
+                                >
+                                  บันทึกออมเงิน
+                                </button>
+                              </div>
+                            )}
+                            {editingTransactionId && <p className="text-xs font-bold text-blue-600/60 uppercase tracking-widest mt-1">กำลังแก้ไข ID: {editingTransactionId}</p>}
+                          </div>
+                          {editingTransactionId && (
+                            <button 
+                              onClick={() => {
+                                setEditingTransactionId(null);
+                                setItem("");
+                                setIncome("");
+                                setSavings("");
+                                setExpense("");
+                                setNote("");
+                              }}
+                              className="p-2 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-600 transition-colors"
+                            >
+                              <X className="w-6 h-6" />
+                            </button>
+                          )}
+                        </div>
+
+                        <form onSubmit={handleSave} className="space-y-6">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className={entryTab === "saving" ? "md:col-span-2" : ""}>
+                              <label className="block text-sm font-bold text-blue-900/50 mb-2 uppercase tracking-wide">วันที่</label>
+                              <div className="relative">
+                                <CalendarIcon className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-blue-400 pointer-events-none" />
+                                <input
+                                  type="date"
+                                  value={date}
+                                  onChange={(e) => setDate(e.target.value)}
+                                  className="w-full bg-blue-50/50 border border-blue-100 rounded-xl pl-12 pr-4 py-3 outline-none focus:border-blue-400 transition-all font-medium text-blue-950"
+                                />
+                              </div>
+                            </div>
+
+                            <div className={entryTab === "saving" ? "md:col-span-2" : ""}>
+                              <label className="block text-sm font-bold text-blue-900/50 mb-2 uppercase tracking-wide">รายการ</label>
+                              <input
+                                type="text"
+                                value={item}
+                                onChange={(e) => setItem(e.target.value)}
+                                className="w-full bg-blue-50/50 border border-blue-100 rounded-xl px-4 py-3 outline-none focus:border-blue-400 transition-all font-medium text-blue-950"
+                                placeholder={entryTab === "saving" ? "เช่น ออมจากค่าขนม" : "ซื้ออะไร/ได้เงินจากไป?"}
+                              />
+                            </div>
+
+                            {entryTab === "general" ? (
+                              <>
+                                <div>
+                                  <label className="block text-sm font-bold text-blue-900/50 mb-2 uppercase tracking-wide">รายรับ</label>
+                                  <input
+                                    type="number"
+                                    step="any"
+                                    value={income}
+                                    onChange={(e) => setIncome(e.target.value)}
+                                    className="w-full bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 outline-none focus:border-emerald-400 transition-all font-bold text-emerald-700"
+                                    placeholder="0.00"
+                                  />
+                                </div>
+
+                                <div className="p-4 bg-orange-50/50 border border-orange-100 rounded-2xl space-y-4 md:col-span-2">
+                                  <label className="block text-xs font-black text-orange-700/60 uppercase tracking-widest">ส่วนของรายจ่าย (Expenses)</label>
+                                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div>
+                                      <label className="block text-sm font-bold text-blue-900/50 mb-2 uppercase tracking-wide">รายจ่าย (บาท)</label>
+                                      <input
+                                        type="number"
+                                        step="any"
+                                        value={expense}
+                                        onChange={(e) => setExpense(e.target.value)}
+                                        className="w-full bg-orange-50 border border-orange-100 rounded-xl px-4 py-3 outline-none focus:border-orange-400 transition-all font-bold text-orange-700"
+                                        placeholder="0.00"
+                                      />
+                                    </div>
+
+                                    <div>
+                                      <label className="block text-sm font-bold text-blue-900/50 mb-2 uppercase tracking-wide">หมวดหลักรายจ่าย</label>
+                                      <div className="grid grid-cols-2 gap-2 bg-white/50 p-1 rounded-xl border border-orange-100">
+                                        {["ปัจจัย 4", "อื่น ๆ"].map((group) => (
+                                          <button
+                                            key={group}
+                                            type="button"
+                                            onClick={() => {
+                                              setCategoryGroup(group);
+                                              setSubType(group === "ปัจจัย 4" ? "อาหาร" : "ความจำเป็น");
+                                            }}
+                                            className={`py-2 rounded-lg text-xs font-bold transition-all ${
+                                              categoryGroup === group 
+                                              ? "bg-white text-orange-600 shadow-sm" 
+                                              : "text-orange-900/40 hover:text-orange-900/60"
+                                            }`}
+                                          >
+                                            {group}
+                                          </button>
+                                        ))}
+                                      </div>
+                                    </div>
+
+                                    <div>
+                                      <label className="block text-sm font-bold text-blue-900/50 mb-2 uppercase tracking-wide">ประเภทย่อย</label>
+                                      <select
+                                        value={subType}
+                                        onChange={(e) => setSubType(e.target.value)}
+                                        className="w-full bg-white/50 border border-orange-100 rounded-xl px-4 py-3 outline-none focus:border-orange-400 transition-all appearance-none cursor-pointer font-medium text-blue-950"
+                                      >
+                                        {categoryGroup === "ปัจจัย 4" ? (
+                                          <>
+                                            <option value="อาหาร">อาหาร</option>
+                                            <option value="ที่อยู่อาศัย">ที่อยู่อาศัย</option>
+                                            <option value="ยารักษาโรค">ยารักษาโรค</option>
+                                            <option value="เครื่องนุ่งห่ม">เครื่องนุ่งห่ม</option>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <option value="ความจำเป็น">ความจำเป็น</option>
+                                            <option value="ความต้องการ">ความต้องการ</option>
+                                          </>
+                                        )}
+                                      </select>
+                                    </div>
+                                  </div>
+                                </div>
+                              </>
+                            ) : (
+                              <div className="md:col-span-2 p-6 bg-blue-600 rounded-3xl text-white shadow-xl shadow-blue-200">
+                                <div className="flex items-center gap-3 mb-4">
+                                  <PiggyBank className="w-8 h-8 text-blue-100" />
+                                  <div>
+                                    <h3 className="text-xl font-black">บันทึกการออมเงิน</h3>
+                                    <p className="text-blue-100 text-sm">การออมวันนี้ คือความมั่งคั่งในวันหน้า</p>
+                                  </div>
+                                </div>
+                                <div className="space-y-4">
+                                  <div>
+                                    <label className="block text-xs font-bold text-blue-100/60 mb-2 uppercase tracking-widest">จำนวนเงินออม (บาท)</label>
+                                    <input
+                                      type="number"
+                                      step="any"
+                                      value={savings}
+                                      onChange={(e) => setSavings(e.target.value)}
+                                      className="w-full bg-white/10 border border-white/20 rounded-2xl px-6 py-4 outline-none focus:bg-white/20 transition-all font-black text-3xl text-white placeholder:text-white/30"
+                                      placeholder="0.00"
+                                    />
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="md:col-span-2">
+                              <label className="block text-sm font-bold text-blue-900/50 mb-2 uppercase tracking-wide">หมายเหตุ (ถ้ามี)</label>
+                              <textarea
+                                value={note}
+                                onChange={(e) => setNote(e.target.value)}
+                                className="w-full bg-blue-50/50 border border-blue-100 rounded-xl px-4 py-3 outline-none focus:border-blue-400 transition-all font-medium text-blue-950 h-24"
+                                placeholder="..."
+                              ></textarea>
+                            </div>
+                          </div>
+
+                      <button
+                        type="submit"
+                        disabled={loading}
+                        className={`w-full mt-4 text-white font-bold py-4 rounded-2xl shadow-xl transition-all flex items-center justify-center gap-2 group text-xl ${
+                          editingTransactionId ? "bg-amber-500 hover:bg-amber-600 shadow-amber-200" : "bg-blue-600 hover:bg-blue-700 shadow-blue-200"
+                        }`}
+                      >
+                        <Save className="w-6 h-6" />
+                        {loading ? "กำลังบันทึก..." : editingTransactionId ? "ยืนยันการแก้ไข" : "ยืนยันการบันทึก"}
+                      </button>
+                    </form>
+                  </motion.div>
+                ) : (
+                  <motion.div 
+                    key="dashboard"
+                    initial={{ opacity: 0, x: 20 }}
+                    animate={{ opacity: 1, x: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    className="space-y-6"
+                  >
+                    {/* Month Selector */}
+                    <GlassCard className="p-4 bg-white/80 border-blue-100 shadow-sm">
+                      <div className="flex items-center justify-between">
+                        <button 
+                          onClick={() => {
+                            if (selectedMonth === 0) {
+                              setSelectedMonth(11);
+                              setSelectedYear(selectedYear - 1);
+                            } else {
+                              setSelectedMonth(selectedMonth - 1);
+                            }
+                          }}
+                          className="p-2 hover:bg-blue-50 rounded-lg text-blue-600"
+                        >
+                          <ChevronRight className="w-5 h-5 rotate-180" />
+                        </button>
+                        <h3 className="text-xl font-bold text-blue-950">
+                          {new Intl.DateTimeFormat('th-TH', { month: 'long', year: 'numeric' }).format(new Date(selectedYear, selectedMonth))}
+                        </h3>
+                        <button 
+                          onClick={() => {
+                            if (selectedMonth === 11) {
+                              setSelectedMonth(0);
+                              setSelectedYear(selectedYear + 1);
+                            } else {
+                              setSelectedMonth(selectedMonth + 1);
+                            }
+                          }}
+                          className="p-2 hover:bg-blue-50 rounded-lg text-blue-600"
+                        >
+                          <ChevronRight className="w-5 h-5" />
+                        </button>
+                      </div>
+                    </GlassCard>
+
+                    {/* Negative Balance Alert */}
+                    <AnimatePresence>
+                      {monthlyNetBalance < 0 && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0, y: -10 }}
+                          animate={{ opacity: 1, height: 'auto', y: 0 }}
+                          exit={{ opacity: 0, height: 0, y: -10 }}
+                          className="bg-red-50 border border-red-100 p-4 rounded-2xl flex items-center gap-3 overflow-hidden"
+                        >
+                          <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                            <TrendingDown className="w-5 h-5 text-red-600" />
+                          </div>
+                          <div>
+                            <p className="text-red-900 font-bold">⚠️ ยอดคงเหลือติดลบ!</p>
+                            <p className="text-red-600 text-sm">โปรดตรวจสอบการใช้จ่ายและวางแผนการเงินใหม่นะจ๊ะ</p>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
+                    {/* Summary Stats */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      {[
+                        { label: "รายรับรวม", value: monthlyIncome, color: "text-emerald-600", bg: "bg-emerald-50" },
+                        { label: "เงินออมรวม", value: monthlySavings, color: "text-blue-600", bg: "bg-blue-50" },
+                        { label: "รายจ่ายรวม", value: monthlyExpenses, color: "text-orange-600", bg: "bg-orange-50" },
+                        { label: "คงเหลือสุทธิ", value: monthlyNetBalance, color: monthlyNetBalance < 0 ? "text-red-600" : "text-blue-900", bg: monthlyNetBalance < 0 ? "bg-red-50" : "bg-blue-100", tip: "[รายรับ - เงินออม - รายจ่าย]" }
+                      ].map((stat, i) => (
+                        <motion.div 
+                          initial={{ opacity: 0, y: 10 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: i * 0.1 }}
+                          key={stat.label} 
+                          className={`${stat.bg} p-4 rounded-2xl border border-white/50 text-center shadow-sm relative group/stat`}
+                        >
+                          <p className="text-[10px] uppercase font-bold text-slate-500 mb-1">{stat.label}</p>
+                          <p className={`text-lg font-black ${stat.color}`}>{stat.value.toLocaleString()} ฿</p>
+                          {'tip' in stat && (
+                            <div className="absolute -bottom-2 left-1/2 -translate-x-1/2 bg-blue-600 text-white text-[8px] px-2 py-0.5 rounded-full opacity-0 group-hover/stat:opacity-100 transition-opacity whitespace-nowrap">
+                              {stat.tip}
+                            </div>
+                          )}
+                        </motion.div>
+                      ))}
+                    </div>
+
+                    {/* Chart Section */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                      <GlassCard className="p-6 bg-white/90 border-blue-100 shadow-sm md:col-span-2">
+                        <h4 className="font-bold text-blue-950 mb-6 flex items-center gap-2">
+                          <TrendingUp className="w-4 h-4" /> สรุปรายรับ-รายจ่าย-เงินออม
+                        </h4>
+                        <div className="h-[250px] w-full">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <BarChart
+                              data={[
+                                { name: 'รายรับ', value: monthlyIncome },
+                                { name: 'เงินออม', value: monthlySavings },
+                                { name: 'รายจ่าย', value: monthlyExpenses }
+                              ]}
+                              margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
+                            >
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                              <XAxis 
+                                dataKey="name" 
+                                axisLine={false} 
+                                tickLine={false} 
+                                tick={{ fill: '#64748b', fontSize: 12, fontWeight: 500 }}
+                                dy={10}
+                              />
+                              <YAxis 
+                                axisLine={false} 
+                                tickLine={false} 
+                                tick={{ fill: '#64748b', fontSize: 10 }}
+                              />
+                              <Tooltip 
+                                cursor={{ fill: '#f8fafc' }}
+                                contentStyle={{ 
+                                  borderRadius: '12px', 
+                                  border: 'none', 
+                                  boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)',
+                                  fontSize: '12px'
+                                }}
+                              />
+                              <Bar dataKey="value" radius={[6, 6, 0, 0]} barSize={40}>
+                                <Cell fill="#10b981" />
+                                <Cell fill="#3b82f6" />
+                                <Cell fill="#f97316" />
+                              </Bar>
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </GlassCard>
+
+                      {/* Category Breakdown (Pie Chart) */}
+                      <GlassCard className="p-6 bg-white/90 border-blue-100 shadow-sm">
+                        <h4 className="font-bold text-blue-950 mb-6 flex items-center gap-2">
+                          <History className="w-4 h-4" /> สัดส่วนรายจ่ายตามหมวด
+                        </h4>
+                        <div className="h-[250px] w-full">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <PieChart>
+                              <Pie
+                                data={[
+                                  { name: 'ปัจจัย 4', value: monthlyTransactions.filter(t => t.type.includes('ปัจจัย 4')).reduce((sum, t) => sum + Number(t.expense || 0), 0) },
+                                  { name: 'อื่น ๆ', value: monthlyTransactions.filter(t => t.type.includes('อื่น ๆ')).reduce((sum, t) => sum + Number(t.expense || 0), 0) }
+                                ].filter(d => d.value > 0)}
+                                cx="50%"
+                                cy="50%"
+                                innerRadius={60}
+                                outerRadius={80}
+                                paddingAngle={5}
+                                dataKey="value"
+                              >
+                                <Cell fill="#ef4444" />
+                                <Cell fill="#fcd34d" />
+                              </Pie>
+                              <Tooltip 
+                                contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                              />
+                              <Legend verticalAlign="bottom" height={36}/>
+                            </PieChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </GlassCard>
+
+                      {/* Savings Trend (Line/Area Chart) */}
+                      <GlassCard className="p-6 bg-white/90 border-blue-100 shadow-sm">
+                        <h4 className="font-bold text-blue-950 mb-6 flex items-center gap-2">
+                          <PiggyBank className="w-4 h-4" /> แนวโน้มการออม
+                        </h4>
+                        <div className="h-[250px] w-full">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <AreaChart
+                              data={monthlyTransactions
+                                .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+                                .map(t => ({
+                                  date: t.date,
+                                  saving: Number(t.savings || 0)
+                                }))
+                                .reduce((acc: any[], curr) => {
+                                  const existing = acc.find(a => a.date === curr.date);
+                                  if (existing) {
+                                    existing.saving += curr.saving;
+                                  } else {
+                                    acc.push({...curr});
+                                  }
+                                  return acc;
+                                }, [])
+                              }
+                              margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                            >
+                              <defs>
+                                <linearGradient id="colorSaving" x1="0" y1="0" x2="0" y2="1">
+                                  <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.1}/>
+                                  <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}/>
+                                </linearGradient>
+                              </defs>
+                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                              <XAxis 
+                                dataKey="date" 
+                                hide={true}
+                              />
+                              <YAxis hide={true} />
+                              <Tooltip 
+                                contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                              />
+                              <Area type="monotone" dataKey="saving" stroke="#3b82f6" fillOpacity={1} fill="url(#colorSaving)" strokeWidth={2} />
+                            </AreaChart>
+                          </ResponsiveContainer>
+                        </div>
+                      </GlassCard>
+                    </div>
+
+                    {/* Transaction List */}
+                    <div className="bg-white/90 border border-blue-100 rounded-3xl shadow-xl overflow-hidden">
+                      <div className="p-6 border-b border-blue-50 flex items-center justify-between">
+                        <h4 className="font-bold text-blue-950 flex items-center gap-2">
+                          <History className="w-4 h-4" /> รายการล่าสุด
+                        </h4>
+                        <span className="text-xs font-bold text-blue-600 bg-blue-50 px-2 py-1 rounded-md">
+                          {monthlyTransactions.length} รายการ
+                        </span>
+                      </div>
+                      <div className="max-h-[400px] overflow-y-auto">
+                        {monthlyTransactions.length > 0 ? (
+                          <div className="divide-y divide-blue-50 px-6">
+                            {monthlyTransactions
+                              .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+                              .map((t, i) => (
+                                <div key={i} className="py-4 flex items-center justify-between group">
+                                  <div className="flex items-center gap-3">
+                                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center border ${
+                                      Number(t.income) > 0 ? "bg-emerald-50 border-emerald-100 text-emerald-600" : "bg-orange-50 border-orange-100 text-orange-600"
+                                    }`}>
+                                      {Number(t.income) > 0 ? <TrendingUp className="w-5 h-5" /> : <TrendingDown className="w-5 h-5" />}
+                                    </div>
+                                    <div>
+                                      <p className="font-bold text-blue-950 group-hover:text-blue-600 transition-colors uppercase text-xs tracking-wide">{t.item}</p>
+                                      <p className="text-[10px] text-slate-400 font-medium">📅 {t.date} | 🏷️ {t.type}</p>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <div className="text-right mr-2">
+                                      <p className={`font-black ${Number(t.income) > 0 ? "text-emerald-600" : "text-orange-600"}`}>
+                                        {Number(t.income) > 0 ? `+${t.income}` : `-${t.expense}`} ฿
+                                      </p>
+                                      <p className="text-[10px] text-slate-400 font-bold uppercase">คงเหลือ: {t.balance} ฿</p>
+                                    </div>
+                                    <div className="flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <button 
+                                        onClick={() => handleEdit(t)}
+                                        className="p-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition-colors"
+                                        title="แก้ไข"
+                                      >
+                                        <Pencil className="w-3.5 h-3.5" />
+                                      </button>
+                                      <button 
+                                        onClick={() => handleDelete(t.id)}
+                                        className="p-1.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-colors"
+                                        title="ลบ"
+                                      >
+                                        <Trash2 className="w-3.5 h-3.5" />
+                                      </button>
+                                    </div>
+                                  </div>
+                                </div>
+                              ))}
+                          </div>
+                        ) : (
+                          <div className="p-12 text-center text-slate-400">
+                            <Info className="w-12 h-12 mx-auto mb-4 opacity-10" />
+                            <p>ไม่พบข้อมูลการบันทึกในเดือนนี้</p>
+                            <button onClick={() => setView("entry")} className="mt-4 text-sm font-bold text-blue-600 hover:underline border-none bg-transparent cursor-pointer">เริ่มบันทึกกันเถอะ!</button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Footer */}
+        <motion.div 
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 1 }}
+          className="mt-12 text-center text-blue-900/30 text-sm font-bold tracking-widest uppercase"
+        >
+          © 2026 Bangkaew Prachasan School · Digital Account Team
+        </motion.div>
+
+      </main>
+    </div>
+  );
+}

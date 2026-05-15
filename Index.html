@@ -1,0 +1,69 @@
+/**
+ * Google Apps Script - Code.gs
+ * ระบบบันทึกบัญชีรายรับ-รายจ่าย โรงเรียนบางแก้วประชาสรรค์
+ */
+
+function doGet() {
+  return HtmlService.createHtmlOutputFromFile('Index')
+      .setTitle('Bangkaew Digital Account')
+      .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL)
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+/**
+ * ฟังก์ชันตรวจสอบการเข้าสู่ระบบ
+ * @param {string} username เลขประจำตัว
+ * @param {string} password รหัสผ่าน
+ */
+function checkLogin(username, password) {
+  const SPREADSHEET_ID = "1GrY35uQjdFVOs9vKRKgj7nRJYrjbOm5RbZtOZ6s3XJc";
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  const sheet = ss.getSheetByName("Students");
+  const data = sheet.getDataRange().getValues();
+  
+  // ข้ามหัวตาราง (แถวที่ 1)
+  for (let i = 1; i < data.length; i++) {
+    if (data[i][0].toString() === username.toString() && data[i][2].toString() === password.toString()) {
+      return { 
+        success: true, 
+        name: data[i][1] 
+      };
+    }
+  }
+  return { success: false, message: "เลขประจำตัวหรือรหัสผ่านไม่ถูกต้อง" };
+}
+
+/**
+ * ฟังก์ชันบันทึกข้อมูลลงชีท Data
+ * @param {Object} formData ข้อมูลจากหน้าเว็บ
+ */
+function saveData(formData) {
+  try {
+    const SPREADSHEET_ID = "1GrY35uQjdFVOs9vKRKgj7nRJYrjbOm5RbZtOZ6s3XJc";
+    const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+    const sheet = ss.getSheetByName("Data");
+    
+    // คำนวณคงเหลือ: [รายรับ - เงินออม - รายจ่าย]
+    const income = Number(formData.income || 0);
+    const savings = Number(formData.savings || 0);
+    const expense = Number(formData.expense || 0);
+    const balance = income - savings - expense;
+    
+    // บันทึกข้อมูลตามคอลัมน์: A-เลขประจำตัว, B-วันที่, C-รายการ, D-รายรับ, E-เงินออม, F-รายจ่าย, G-คงเหลือ, H-ประเภท, I-หมายเหตุ
+    sheet.appendRow([
+      formData.studentId,
+      formData.date || new Date(), // ใช้ค่าจากฟอร์มถ้ามี
+      formData.item,
+      income,
+      savings,
+      expense,
+      balance,
+      formData.type,
+      formData.note
+    ]);
+    
+    return { success: true, balance: balance };
+  } catch (e) {
+    return { success: false, message: e.toString() };
+  }
+}
